@@ -1,0 +1,8 @@
+Timestamp,Mode,Front_Dist_cm,Left_Dist_cm,Right_Dist_cm,Action,Notes
+00:37:44.641,lidar,37.3,49.1,15.5,FORWARD,Speed=0.15
+00:37:44.912,lidar,36.5,48.5,15.5,FORWARD,Speed=0.14
+00:37:45.062,lidar,35.7,47.2,15.1,FORWARD,Speed=0.13
+00:37:45.212,lidar,31.2,44.6,14.7,FORWARD,Speed=0.10
+00:37:45.362,lidar,29.4,43.4,14.3,FORWARD,Speed=0.10
+00:37:45.513,lidar,24.0,41.9,14.8,FORWARD,Speed=0.10
+00:37:45.663,lidar,22.8,41.5,15.0,FORWARD,Speed=0.10
