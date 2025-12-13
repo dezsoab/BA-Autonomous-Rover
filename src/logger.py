@@ -1,29 +1,46 @@
 import csv
 import os
-from datetime import datetime
+import time
+import queue
+import threading
 
 
 class ThesisLogger:
     def __init__(self, mode):
-        # 1. Get the folder where THIS script (logger.py) lives
-        current_script_dir = os.path.dirname(os.path.abspath(__file__))
+        if not os.path.exists("data_logs"):
+            os.makedirs("data_logs")
 
-        # 2. Go up one level to find the Project Root (BA-Autonomous-Rover)
-        project_root = os.path.abspath(os.path.join(current_script_dir, ".."))
+        timestamp = time.strftime("%Y%m%d_%H%M%S")
+        self.filename = f"data_logs/rover_log_{mode}_{timestamp}.csv"
 
-        # 3. Define the logs folder path safely
-        self.log_folder = os.path.join(project_root, "data_logs")
+        self.log_queue = queue.Queue()
+        self.running = True
+        self.thread = threading.Thread(target=self._writer_loop, daemon=True)
+        self.thread.start()
 
-        # 4. Create the folder if it doesn't exist (safety check)
-        os.makedirs(self.log_folder, exist_ok=True)
+        print(f"[LOG] Logging to: {self.filename}")
 
-        # 5. Create filename
-        filename = f"rover_log_{mode}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
-        self.filepath = os.path.join(self.log_folder, filename)
+    def log(self, source, front, left, right, action, notes=""):
+        """
+        Non-blocking log. Puts data in the queue and returns immediately.
+        """
+        timestamp = time.strftime("%H:%M:%S") + f".{int(time.time() * 1000) % 1000:03d}"
 
-        # Open file and write header
-        with open(self.filepath, mode="w", newline="") as f:
-            writer = csv.writer(f)
+        row = [
+            timestamp,
+            source,
+            f"{front:.1f}",
+            f"{left:.1f}",
+            f"{right:.1f}",
+            action,
+            notes,
+        ]
+
+        self.log_queue.put(row)
+
+    def _writer_loop(self):
+        with open(self.filename, mode="w", newline="") as file:
+            writer = csv.writer(file)
             writer.writerow(
                 [
                     "Timestamp",
@@ -36,23 +53,18 @@ class ThesisLogger:
                 ]
             )
 
-        print(f"[LOG] Logging to: {self.filepath}")
+            while self.running or not self.log_queue.empty():
+                try:
+                    row = self.log_queue.get(timeout=1.0)
+                    writer.writerow(row)
+                    file.flush()
+                    self.log_queue.task_done()
+                except queue.Empty:
+                    continue
+                except Exception as e:
+                    print(f"[LOG ERROR]: {e}")
 
-    def log(self, mode, front, left, right, action, notes=""):
-        try:
-            with open(self.filepath, mode="a", newline="") as f:
-                writer = csv.writer(f)
-                timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
-                writer.writerow(
-                    [
-                        timestamp,
-                        mode,
-                        f"{front:.1f}",
-                        f"{left:.1f}",
-                        f"{right:.1f}",
-                        action,
-                        notes,
-                    ]
-                )
-        except Exception as e:
-            print(f"Logging Error: {e}")
+    def close(self):
+        self.running = False
+        self.thread.join()
+        print(f"[LOG] Log file closed: {self.filename}")

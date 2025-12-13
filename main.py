@@ -100,6 +100,7 @@ def main():
         print("Cleaning up resources...")
         rover.cleanup()
         brain.stop()
+        logger.close()
 
 
 if __name__ == "__main__":
