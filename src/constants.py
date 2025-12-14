@@ -3,6 +3,9 @@
 DEFAULT_SPEED = 0.55
 MIN_APPROACH_SPEED = 0.25
 STALL_THRESHOLD = 0.25
+MAX_SPEED = 1.0
+MIN_SPEED = -1.0
+TURN_SPEED = 0.25  # Legacy: Used if motor.turn_left()/right() called manually
 #####################
 
 #####################
@@ -27,6 +30,7 @@ MAX_VALID_DIST_CM = 250.0
 SLOWDOWN_DIST_CM = 55.0  # Below this, we slow to MIN_APPROACH_SPEED
 CRITICAL_DIST_CM = 15.0  # Below this, we stop and escape
 SIDE_CUSHION_DIST_CM = 35.0  # If wall is further than this, drive straight
+STOPPING_DIST_CM = 25.0
 #####################
 
 #####################
