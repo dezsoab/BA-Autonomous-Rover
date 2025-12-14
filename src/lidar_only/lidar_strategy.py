@@ -110,8 +110,7 @@ class LidarStrategy(ObstacleStrategy):
                                     self.right_dist += 1
 
     def check_path(self):
-        is_safe = self.front_dist > STOPPING_DIST_CM
-        return is_safe, self.front_dist, self.left_dist, self.right_dist
+        return self.front_dist, self.left_dist, self.right_dist
 
     def stop(self):
         self.running = False

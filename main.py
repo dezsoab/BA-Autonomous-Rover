@@ -2,8 +2,6 @@ import argparse
 import time
 from src.motor_driver import MotorDriver
 from src.lidar_only.lidar_strategy import LidarStrategy
-from src.camera_only.camera_strategy import CameraStrategy
-from src.fusion.fusion_strategy import FusionStrategy
 from src.logger import ThesisLogger
 from src.constants import *
 
@@ -11,8 +9,6 @@ from src.constants import *
 def get_strategy(mode):
     if mode == "lidar":
         return LidarStrategy()
-    # elif mode == 'camera': return CameraStrategy()
-    # elif mode == 'fusion': return FusionStrategy()
     else:
         raise ValueError("Invalid Mode")
 
@@ -32,72 +28,83 @@ def main():
         print(f"Hardware Error: {e}")
         return
 
-    print(f"--- ROVER {ACTION_INIT}: {args.mode.upper()} ---")
+    print(f"--- ROVER {ACTION_INIT} ---")
 
     try:
         while True:
-            is_safe, front_distance, left_distance, right_distance = brain.check_path()
+            front, left, right = brain.check_path()
 
-            # calculate base speed (P-only controller)
-            # slow down as rover gets closer to wall
-            speed_factor = (front_distance - STOPPING_DIST_CM) / (
-                SLOWDOWN_DIST_CM - STOPPING_DIST_CM
-            )
-            base_speed = max(
-                MIN_APPROACH_SPEED, min(speed_factor * DEFAULT_SPEED, DEFAULT_SPEED)
-            )
+            if front > SLOWDOWN_DIST_CM:
+                base_speed = DEFAULT_SPEED
+            else:
+                base_speed = MIN_APPROACH_SPEED
 
-            # calculate steering
+            # GENTLE STEERING
             turn_val = 0.0
-            if left_distance < SIDE_CUSHION_DIST_CM:
-                push = (SIDE_CUSHION_DIST_CM - left_distance) / SIDE_CUSHION_DIST_CM
-                turn_val += push * TURN_SPEED
 
-            if right_distance < SIDE_CUSHION_DIST_CM:
-                push = (SIDE_CUSHION_DIST_CM - right_distance) / SIDE_CUSHION_DIST_CM
-                turn_val -= push * TURN_SPEED
+            if left < SIDE_CUSHION_DIST_CM:
+                turn_val += (
+                    SIDE_CUSHION_DIST_CM - left
+                ) * STEER_SENSITIVITY  # Nudge Right
 
-            if not is_safe:
-                # emergency stop if too close
-                print(f"CRITICAL OBSTACLE ({front_distance:.1f}cm) -> STOP")
-                logger.log(
-                    args.mode,
-                    front_distance,
-                    left_distance,
-                    right_distance,
-                    ACTION_BACKWARD,
-                    f"L={left_motor_speed:.2f} R={right_motor_speed:.2f}",
-                )
+            if right < SIDE_CUSHION_DIST_CM:
+                turn_val -= (
+                    SIDE_CUSHION_DIST_CM - right
+                ) * STEER_SENSITIVITY  # Nudge Left
+
+            # Start steering away slightly before we hit the slowdown zone
+            if front < SLOWDOWN_DIST_CM:
+                if left < right:
+                    turn_val += OBSTACLE_AVOIDANCE_BIAS
+                else:
+                    turn_val -= OBSTACLE_AVOIDANCE_BIAS
+
+            # Max turn is 25% power difference
+            turn_val = max(-0.25, min(turn_val, 0.25))
+
+            # CRITICAL STOP & PRECISION TURN
+            if front < CRITICAL_DIST_CM:
+                print(f"CRITICAL ({front:.1f}cm) -> PRECISION TURN")
                 rover.stop(force_stop=True)
                 time.sleep(0.2)
-                rover.drive(-0.3, -0.3)
-                time.sleep(0.5)
+
+                # Back up slowly
+                escape_speed = STALL_THRESHOLD
+                rover.drive(-escape_speed, -escape_speed)
+                time.sleep(0.6)
                 rover.stop()
                 time.sleep(0.1)
+
+                # Precision Pivot
+                if left > right:
+                    rover.drive(-escape_speed, escape_speed)  # Turn Left
+                else:
+                    rover.drive(escape_speed, -escape_speed)  # Turn Right
+
+                time.sleep(0.5)
+                rover.stop()
+                time.sleep(0.2)
                 continue
 
-            # Diferential drive
-            left_motor_speed = base_speed + turn_val
-            right_motor_speed = base_speed - turn_val
+            # Drive
+            left_motor = base_speed + turn_val
+            right_motor = base_speed - turn_val
 
-            rover.drive(left_motor_speed, right_motor_speed)
+            rover.drive(left_motor, right_motor)
 
             logger.log(
                 args.mode,
-                front_distance,
-                left_distance,
-                right_distance,
+                front,
+                left,
+                right,
                 ACTION_DRIVE,
-                f"L={left_motor_speed:.2f} R={right_motor_speed:.2f}",
+                f"L={left_motor:.2f} R={right_motor:.2f}",
             )
-            time.sleep(
-                0.016
-            )  # <- 60 Hz Speed Limit => Time = cycle/target Hz => T=1/60
+            time.sleep(0.016)
 
     except KeyboardInterrupt:
-        print(f"{ACTION_STOP} received. Shutting down...")
+        print(f"{ACTION_STOP} received.")
     finally:
-        print("Cleaning up resources...")
         rover.cleanup()
         brain.stop()
         logger.close()
